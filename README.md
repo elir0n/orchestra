@@ -1,14 +1,14 @@
-# Orchestra
+# 🎼 Orchestra
 
 A multi-agent orchestrator. Each agent is a self-contained tool that does one job well.
 
 **Agents:**
-- [referral-finder](#referral-finder-agent) — finds engineers at a company in Israel, gets their emails, and drafts referral request messages
-- [job-finder](#job-finder-agent) — searches Israeli job boards for a role and tailors your CV to each posting as a `.docx`, then emails you the files
+- 🤝 [referral-finder](#referral-finder-agent) — finds engineers at a company in Israel, gets their emails, and drafts referral request messages
+- 💼 [job-finder](#job-finder-agent) — searches Israeli job boards for a role and tailors your CV to each posting as a `.docx`, then emails you the files
 
 ---
 
-## Table of Contents
+## 📋 Table of Contents
 
 - [Overview](#overview)
 - [Installation](#installation)
@@ -33,18 +33,18 @@ A multi-agent orchestrator. Each agent is a self-contained tool that does one jo
 
 ---
 
-## Overview
+## 🔭 Overview
 
 Orchestra runs focused agents from the command line. Each agent does one job and emails you the results.
 
-- **referral-finder** — give it a company name, get referral-ready email drafts for engineers at that company in Israel
-- **job-finder** — give it a role, get tailored `.docx` CVs for Israeli job postings landing in your inbox
+- 🤝 **referral-finder** — give it a company name, get referral-ready email drafts for engineers at that company in Israel
+- 💼 **job-finder** — give it a role, get tailored `.docx` CVs for Israeli job postings landing in your inbox
 
 No paid email APIs. Everything runs from the command line.
 
 ---
 
-## Installation
+## 🚀 Installation
 
 ```bash
 # Clone and enter the repo
@@ -62,7 +62,7 @@ cp .env.example .env
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 ### Environment Variables
 
@@ -107,7 +107,7 @@ Copy `.env.example` to `.env` and fill in the values below.
 
 ---
 
-### Gmail App Password Setup
+### 🔑 Gmail App Password Setup
 
 Gmail blocks regular password authentication via SMTP. You need a dedicated App Password instead.
 
@@ -121,16 +121,16 @@ If authentication fails later, the error message in the logs will link you direc
 
 ---
 
-## Referral Finder Agent
+## 🤝 Referral Finder Agent
 
 ### What It Does
 
 Given only a company name, the agent:
 
-1. Searches LinkedIn via Tavily for engineers and tech leads at that company who are **based in Israel**
-2. For each person found, runs a free multi-tier pipeline to find their email address
-3. Calls the Claude API to write a short, warm, personalized referral request email — opening with the shared Israeli connection, and mentioning Bar Ilan University if there's a match
-4. Sends you one summary email with all results: name, LinkedIn URL, email (or "not found"), and the ready-to-send draft
+1. 🔍 Searches LinkedIn via Tavily for engineers and tech leads at that company who are **based in Israel**
+2. 📧 For each person found, runs a free multi-tier pipeline to find their email address
+3. ✍️ Calls the Claude API to write a short, warm, personalized referral request email — opening with the shared Israeli connection, and mentioning Bar Ilan University if there's a match
+4. 📬 Sends you one summary email with all results: name, LinkedIn URL, email (or "not found"), and the ready-to-send draft
 
 ---
 
@@ -197,11 +197,11 @@ The search is sequential (one Tavily query per role keyword). Steps 2 and 3 run 
 
 ---
 
-### Email Finding — How It Works
+### 📧 Email Finding — How It Works
 
 Email finding runs through four free tiers in order. It stops at the first confident result. The tiers also **learn from each other**: once an email is found at a company, the pattern (e.g. `{first}.{last}@stripe.com`) is cached to disk in `email_patterns.json`, so the second person at the same company skips straight to Tier 2.
 
-#### Tier 1 — GitHub API
+#### Tier 1 — GitHub API 🐙
 
 Searches GitHub by name and company. Checks two sources:
 
@@ -214,14 +214,14 @@ Scores each GitHub account by name similarity + company field match. Only accept
 **Best for:** active open-source contributors, engineers at software companies.
 **Hit rate:** ~30–40% for this audience.
 
-#### Tier 2 — Pattern Cache
+#### Tier 2 — Pattern Cache 💾
 
 If a previous candidate at the same company had their email found (via any tier), the pattern is already known. This tier applies the cached pattern to generate the email address and then verifies it via SMTP.
 
 **Free, unlimited.** Zero API calls once the pattern is known.
 **Hit rate:** 100% for subsequent candidates at the same company, once the first is found.
 
-#### Tier 3 — Hunter.io Domain Search
+#### Tier 3 — Hunter.io Domain Search 🎯
 
 Uses Hunter.io's `/v2/domain-search` endpoint, which returns the company's email domain and most common pattern (e.g. `first.last`). This endpoint is **free and does not count toward the 25/month per-person email finder cap** — it only returns format metadata, not individual emails.
 
@@ -229,7 +229,7 @@ After getting the pattern, the email is constructed and verified via SMTP.
 
 **Hit rate:** Works for ~60% of companies.
 
-#### Tier 4 — SMTP Permutation Scan
+#### Tier 4 — SMTP Permutation Scan 🔁
 
 Generates 7 common email address permutations:
 
@@ -250,7 +250,7 @@ Automatically skips companies using Microsoft 365, Mimecast, or Proofpoint becau
 **Free, no API key, no limits.**
 **Limitation:** Doesn't work reliably for Microsoft 365 / enterprise mail providers. Port 25 may be blocked on some cloud providers, but works on most home/office networks.
 
-#### Tier 5 — Not Found
+#### Tier 5 — Not Found ❌
 
 If all tiers fail, the candidate is still included in the results with `Email: NOT FOUND — connect via LinkedIn first`. The Claude-generated message is still produced and included, so you can use it to reach out over LinkedIn instead.
 
@@ -311,17 +311,17 @@ Referral Outreach — 8 candidates at Google (5 emails found)
 
 ---
 
-## Job Finder Agent
+## 💼 Job Finder Agent
 
 ### What It Does
 
 Given a job role, the agent:
 
-1. Searches Israeli job boards (Drushim, AllJobs, JobMaster, and a broad fallback) for open positions matching your criteria
-2. Extracts the full job description from each posting
-3. Calls Claude to tailor your master CV to each job — ATS-optimized, one page, matching your format template
-4. Saves each tailored CV as a `.docx` file
-5. Emails all the files to you as attachments in a single email
+1. 🔍 Searches Israeli job boards (Drushim, AllJobs, JobMaster, and a broad fallback) for open positions matching your criteria
+2. 📄 Extracts the full job description from each posting
+3. ✍️ Calls Claude to tailor your master CV to each job — ATS-optimized, one page, matching your format template
+4. 💾 Saves each tailored CV as a `.docx` file
+5. 📬 Emails all the files to you as attachments in a single email
 
 ---
 
@@ -406,18 +406,18 @@ CLI args
 
 ---
 
-### CV Tailoring Rules
+### 📐 CV Tailoring Rules
 
 These rules are baked into Claude's system prompt and applied to every CV:
 
-1. **One page** — output is single-page markdown, no preamble
-2. **Format match** — structure and headings follow the `--format-cv` template exactly
-3. **ATS optimization** — keywords from the job description are incorporated using the job's own phrasing
-4. **Relevant projects only** — 2–4 most relevant projects are kept; others are removed
-5. **Rewritten bullets** — every bullet point is rewritten with strong action verbs and quantified impact where possible
-6. **Technology emphasis** — tools and concepts explicitly mentioned in the job description are surfaced
-7. **ATS-safe formatting** — `##` headings, `-` bullets, no tables, no columns, no icons
-8. **No fabrication** — Claude may reframe and emphasize but cannot invent experience not in the master CV
+1. **📏 One page** — output is single-page markdown, no preamble
+2. **🎨 Format match** — structure and headings follow the `--format-cv` template exactly
+3. **🤖 ATS optimization** — keywords from the job description are incorporated using the job's own phrasing
+4. **🗂️ Relevant projects only** — 2–4 most relevant projects are kept; others are removed
+5. **✏️ Rewritten bullets** — every bullet point is rewritten with strong action verbs and quantified impact where possible
+6. **🛠️ Technology emphasis** — tools and concepts explicitly mentioned in the job description are surfaced
+7. **✅ ATS-safe formatting** — `##` headings, `-` bullets, no tables, no columns, no icons
+8. **🚫 No fabrication** — Claude may reframe and emphasize but cannot invent experience not in the master CV
 
 ---
 
@@ -461,7 +461,7 @@ tailored_cvs/
 
 ---
 
-## Adding More Agents
+## 🔧 Adding More Agents
 
 Adding a new agent requires only creating a new folder:
 
