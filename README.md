@@ -1,6 +1,10 @@
 # Orchestra
 
-A multi-agent orchestrator. Each agent is a self-contained tool that does one job well. This document covers the first agent: **referral-finder**.
+A multi-agent orchestrator. Each agent is a self-contained tool that does one job well.
+
+**Agents:**
+- [referral-finder](#referral-finder-agent) — finds engineers at a company in Israel, gets their emails, and drafts referral request messages
+- [job-finder](#job-finder-agent) — searches Israeli job boards for a role and tailors your CV to each posting as a `.docx`, then emails you the files
 
 ---
 
@@ -18,13 +22,23 @@ A multi-agent orchestrator. Each agent is a self-contained tool that does one jo
   - [Pipeline Walkthrough](#pipeline-walkthrough)
   - [Email Finding — How It Works](#email-finding--how-it-works)
   - [Output Format](#output-format)
+- [Job Finder Agent](#job-finder-agent)
+  - [What It Does](#what-it-does-1)
+  - [Usage](#usage-1)
+  - [All Flags](#all-flags-1)
+  - [Pipeline Walkthrough](#pipeline-walkthrough-1)
+  - [CV Tailoring Rules](#cv-tailoring-rules)
+  - [Output Format](#output-format-1)
 - [Adding More Agents](#adding-more-agents)
 
 ---
 
 ## Overview
 
-You give Orchestra a company name. It finds engineers and tech leads at that company who are based in Israel, tries to find their email address using a chain of free methods, generates a personalized referral request email for each one using Claude, and sends you a single summary email with all the results — ready to copy and send.
+Orchestra runs focused agents from the command line. Each agent does one job and emails you the results.
+
+- **referral-finder** — give it a company name, get referral-ready email drafts for engineers at that company in Israel
+- **job-finder** — give it a role, get tailored `.docx` CVs for Israeli job postings landing in your inbox
 
 No paid email APIs. Everything runs from the command line.
 
@@ -76,6 +90,12 @@ Copy `.env.example` to `.env` and fill in the values below.
 | `REFERRAL_FINDER_GITHUB_TOKEN` | *(none)* | GitHub personal access token. Without it you get 60 req/hr; with it you get 5,000/hr. Create one at [github.com/settings/tokens](https://github.com/settings/tokens) — no scopes needed, it only reads public data. Strongly recommended. |
 | `REFERRAL_FINDER_SMTP_FROM_DOMAIN` | `example.com` | Domain used in the SMTP handshake when verifying email addresses. You don't need to own this domain — `example.com` works fine. |
 | `CLAUDE_MODEL` | `claude-haiku-4-5-20251001` | Claude model used to write the emails. Haiku is cheap and good enough. Use `claude-sonnet-4-6` if you want higher quality drafts. |
+
+#### Required — job-finder agent
+
+| Variable | Description |
+|----------|-------------|
+| `JOB_FINDER_TAVILY_API_KEY` | Tavily search API key — same key as referral-finder works fine |
 
 #### Optional — global
 
@@ -287,6 +307,156 @@ Suggested message:
 The exact same content is emailed to `NOTIFY_EMAIL` with the subject:
 ```
 Referral Outreach — 8 candidates at Google (5 emails found)
+```
+
+---
+
+## Job Finder Agent
+
+### What It Does
+
+Given a job role, the agent:
+
+1. Searches Israeli job boards (Drushim, AllJobs, JobMaster, and a broad fallback) for open positions matching your criteria
+2. Extracts the full job description from each posting
+3. Calls Claude to tailor your master CV to each job — ATS-optimized, one page, matching your format template
+4. Saves each tailored CV as a `.docx` file
+5. Emails all the files to you as attachments in a single email
+
+---
+
+### Usage
+
+```bash
+# Dry run — prints tailored CVs to the terminal, no files saved, no email sent
+python main.py job-finder \
+  --master-cv ~/cv_master.md \
+  --format-cv ~/cv_template.docx \
+  --role "Backend Engineer" \
+  --dry-run
+
+# Full run — saves .docx files and emails them to NOTIFY_EMAIL
+python main.py job-finder \
+  --master-cv ~/cv_master.md \
+  --format-cv ~/cv_template.docx \
+  --role "Backend Engineer" \
+  --max-jobs 5
+
+# Startup-only search, part-time
+python main.py job-finder \
+  --master-cv ~/cv_master.md \
+  --format-cv ~/cv_template.docx \
+  --role "Data Scientist" \
+  --startup \
+  --job-type part-time
+```
+
+Both `--master-cv` and `--format-cv` accept `.docx`, `.md`, or plain text files.
+
+Always test with `--dry-run` first.
+
+---
+
+### All Flags
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--master-cv` | Yes | — | Path to your full master CV. All experience and projects go here — Claude picks what's relevant per job. Accepts `.docx`, `.md`, or `.txt`. |
+| `--format-cv` | Yes | — | Path to a CV you already like the look of. Used only as a structural template — Claude will match its heading layout and style. Accepts `.docx`, `.md`, or `.txt`. |
+| `--role` | Yes | — | Job role to search for, e.g. `"Backend Engineer"` or `"Product Manager"` |
+| `--location` | No | `Israel` | Location string appended to search queries |
+| `--startup` | No | off | When set, filters results to startup companies only (detected by keywords like "seed", "founding team", "equity", etc.) |
+| `--job-type` | No | `full-time` | `full-time`, `part-time`, or `contract` |
+| `--max-jobs` | No | `5` | Maximum number of jobs to process |
+| `--output-dir` | No | `./tailored_cvs` | Directory to save the generated `.docx` files |
+| `--claude-model` | No | `claude-sonnet-4-6` | Claude model used for CV tailoring. Sonnet gives high-quality rewrites. |
+| `--dry-run` | No | off | Print tailored CVs to stdout instead of saving files and sending email |
+
+---
+
+### Pipeline Walkthrough
+
+```
+CLI args
+   │
+   ▼
+1. Job Search (sequential, one query per job board)
+   Tavily: site:drushim.co.il "{role}"
+           site:alljobs.co.il "{role}"
+           site:jobmaster.co.il "{role}"
+           "{role}" "Israel" job hiring {year} -site:linkedin.com
+   → fetch full description if Tavily snippet is short
+   → detect job type + startup heuristic
+   → deduplicate by URL and company+title
+   → List[JobPosting]
+   │
+   ▼ (concurrent — 3 workers via ThreadPoolExecutor)
+2. CV Tailor (one Claude call per job)
+   → markdown CV string
+   │
+   ▼
+3. DOCX Writer
+   → .docx file saved to output-dir
+   │
+   ▼
+4. Email
+   → all .docx files sent as attachments to NOTIFY_EMAIL
+     (skipped on --dry-run)
+```
+
+---
+
+### CV Tailoring Rules
+
+These rules are baked into Claude's system prompt and applied to every CV:
+
+1. **One page** — output is single-page markdown, no preamble
+2. **Format match** — structure and headings follow the `--format-cv` template exactly
+3. **ATS optimization** — keywords from the job description are incorporated using the job's own phrasing
+4. **Relevant projects only** — 2–4 most relevant projects are kept; others are removed
+5. **Rewritten bullets** — every bullet point is rewritten with strong action verbs and quantified impact where possible
+6. **Technology emphasis** — tools and concepts explicitly mentioned in the job description are surfaced
+7. **ATS-safe formatting** — `##` headings, `-` bullets, no tables, no columns, no icons
+8. **No fabrication** — Claude may reframe and emphasize but cannot invent experience not in the master CV
+
+---
+
+### Output Format
+
+#### Dry run (terminal)
+
+```
+======================================================================
+DRY RUN — CV #1: Senior Backend Engineer at Monday.com
+URL: https://www.drushim.co.il/job/...
+Startup: False | Type: full-time
+======================================================================
+
+# Your Name
+Tel Aviv, Israel | your@email.com | github.com/you
+
+## Experience
+
+**Backend Engineer — Previous Company** (2022–present)
+- Designed and deployed distributed microservices handling 50M daily events, ...
+...
+```
+
+#### Full run
+
+A single email is sent to `NOTIFY_EMAIL` with the subject:
+```
+Job Finder: 5 tailored CV(s) for "Backend Engineer"
+```
+
+The body lists each job title, company, and URL. All `.docx` files are attached.
+
+Files are also saved locally:
+```
+tailored_cvs/
+├── monday_backend_engineer_20260329_01.docx
+├── wix_backend_engineer_20260329_02.docx
+└── ...
 ```
 
 ---

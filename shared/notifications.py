@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import smtplib
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,46 @@ class NotificationService:
             raise
         except Exception as exc:
             logger.error(f"Failed to send notification email: {exc}")
+            raise
+
+    def send_email_with_attachments(
+        self, subject: str, body: str, attachments: list[Path]
+    ) -> None:
+        """Send an email with one or more file attachments to the operator."""
+        msg = MIMEMultipart()
+        msg["Subject"] = subject
+        msg["From"] = self.smtp_user
+        msg["To"] = self.notify_email
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        for path in attachments:
+            with open(path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{path.name}"',
+            )
+            msg.attach(part)
+
+        try:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(self.smtp_user, self.smtp_password)
+                server.sendmail(self.smtp_user, self.notify_email, msg.as_string())
+            logger.info(
+                f"Email with {len(attachments)} attachment(s) sent to {self.notify_email}"
+            )
+        except smtplib.SMTPAuthenticationError:
+            logger.error(
+                "SMTP authentication failed. For Gmail, set up an App Password at: "
+                "https://myaccount.google.com/apppasswords"
+            )
+            raise
+        except Exception as exc:
+            logger.error(f"Failed to send email with attachments: {exc}")
             raise
 
     @classmethod
