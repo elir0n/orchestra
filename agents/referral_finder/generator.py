@@ -18,6 +18,7 @@ def generate_referral_email(
     location: str = "Israel",
     university: str = "",
     snippet: str = "",
+    target_role: str = "",
 ) -> str:
     """
     Generate a personalized referral request email using Claude.
@@ -34,12 +35,26 @@ def generate_referral_email(
     # Build shared-context hints to warm up the connection
     shared_context_lines = []
     if location:
-        shared_context_lines.append(f"- Both sender and recipient are based in {location} (mention this as a natural shared connection)")
+        shared_context_lines.append(
+            f"- Both sender and recipient are based in {location} "
+            "(mention this as a natural shared connection)"
+        )
     if university and snippet and university.lower() in snippet.lower():
-        shared_context_lines.append(f"- Recipient appears to have studied at {university}, same as the sender — mention this briefly as a personal connection")
+        shared_context_lines.append(
+            f"- Recipient appears to have studied at {university}, same as the sender "
+            "— mention this briefly as a personal connection"
+        )
     elif university:
-        shared_context_lines.append(f"- Sender studied at {university} — mention only if it feels natural, do not force it")
+        shared_context_lines.append(
+            f"- Sender studied at {university} — mention only if it feels natural, do not force it"
+        )
     shared_context = "\n".join(shared_context_lines)
+
+    role_line = (
+        f"- Target role: {target_role} at {person.company}"
+        if target_role
+        else f"- Company: {person.company} (no specific role specified — ask about open engineering roles)"
+    )
 
     user_prompt = f"""Write a referral request email with these details:
 
@@ -51,6 +66,7 @@ RECIPIENT:
 SENDER:
 - Name: {your_name}
 - Background: {your_background}
+{role_line}
 
 SHARED CONTEXT (use to personalize the opening):
 {shared_context}
@@ -58,7 +74,7 @@ SHARED CONTEXT (use to personalize the opening):
 The email should:
 1. Open by leveraging the shared context above (shared country, possibly shared university)
 2. Mention the sender's relevant background in 1-2 sentences
-3. Make a clear, polite ask for a referral or a quick chat about open roles
+3. Make a clear, polite ask for a referral{f' for the {target_role} role' if target_role else ' or a quick chat about open roles'}
 4. Close naturally without sounding desperate
 
 Write directly — no preamble."""

@@ -6,6 +6,26 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+# Roles added when --include-recruiters is set
+RECRUITER_ROLES: list[str] = [
+    "Recruiter",
+    "Technical Recruiter",
+    "Talent Acquisition",
+    "Engineering Manager",
+    "HR",
+]
+
+# Seniority keyword groups used for --seniority filtering
+_SENIORITY_KEYWORDS: dict[str, list[str]] = {
+    "intern":  ["intern", "internship", "student"],
+    "junior":  ["junior", "jr", "entry level", "entry-level", "graduate"],
+    "mid":     ["mid", "mid-level", "intermediate"],
+    "senior":  ["senior", "sr", "experienced"],
+    "staff":   ["staff"],
+    "lead":    ["lead", "tech lead", "principal"],
+    "manager": ["manager", "engineering manager", "em"],
+}
+
 
 @dataclass
 class Person:
@@ -26,10 +46,7 @@ def _parse_name(title: str) -> tuple[str, str, str] | None:
 
     Returns (full_name, first_name, last_name) or None if parsing fails.
     """
-    # Strip trailing " | LinkedIn" or "- LinkedIn"
     title = re.sub(r"\s*[\|\-]\s*LinkedIn.*$", "", title, flags=re.IGNORECASE).strip()
-
-    # Split on " - " or " | " to isolate the name part
     parts = re.split(r"\s*[\-\|]\s*", title)
     if not parts:
         return None
@@ -38,7 +55,6 @@ def _parse_name(title: str) -> tuple[str, str, str] | None:
     if not name or len(name) < 3:
         return None
 
-    # Split name into first / last (take first word as first_name, rest as last_name)
     name_parts = name.split()
     if len(name_parts) < 2:
         return None
@@ -50,12 +66,22 @@ def _parse_name(title: str) -> tuple[str, str, str] | None:
 
 def _extract_role_hint(snippet: str, title: str) -> str:
     """Try to extract the person's role from the snippet or title."""
-    # LinkedIn title format: "Name - Role at Company"
     match = re.search(r"\s*-\s*(.+?)\s+at\s+", title, re.IGNORECASE)
     if match:
         return match.group(1).strip()
-    # Fallback: use the first sentence of the snippet
     return snippet[:80].strip() if snippet else ""
+
+
+def _matches_seniority(role_hint: str, seniority: list[str]) -> bool:
+    """Return True if role_hint contains at least one keyword for any requested seniority tier."""
+    if not seniority:
+        return True  # no filter applied
+    lower = role_hint.lower()
+    for tier in seniority:
+        keywords = _SENIORITY_KEYWORDS.get(tier.lower(), [tier.lower()])
+        if any(kw in lower for kw in keywords):
+            return True
+    return False
 
 
 def find_candidates(
@@ -64,6 +90,7 @@ def find_candidates(
     api_key: str,
     max_results: int = 15,
     location: str = "Israel",
+    seniority: list[str] | None = None,
 ) -> list[Person]:
     """
     Search LinkedIn profiles via Tavily for people at `company` in any of the given `roles`,
@@ -71,6 +98,9 @@ def find_candidates(
     Returns a deduplicated list of Person objects.
     """
     from tavily import TavilyClient
+
+    if seniority is None:
+        seniority = []
 
     client = TavilyClient(api_key=api_key)
     seen_urls: set[str] = set()
@@ -101,11 +131,8 @@ def find_candidates(
             title = result.get("title", "")
             snippet = result.get("content", "")
 
-            # Only process linkedin.com/in/ profile URLs
             if "linkedin.com/in/" not in url:
                 continue
-
-            # Deduplicate by URL and name
             if url in seen_urls:
                 continue
 
@@ -119,10 +146,15 @@ def find_candidates(
             if name_key in seen_names:
                 continue
 
+            role_hint = _extract_role_hint(snippet, title)
+
+            if seniority and not _matches_seniority(role_hint, seniority):
+                logger.debug(f"Skipping (seniority filter): {full_name} — {role_hint}")
+                continue
+
             seen_urls.add(url)
             seen_names.add(name_key)
 
-            role_hint = _extract_role_hint(snippet, title)
             candidates.append(
                 Person(
                     name=full_name,

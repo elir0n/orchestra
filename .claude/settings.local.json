@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:hiremetech.com)",
+      "WebSearch",
+      "WebFetch(domain:refferally.co.il)",
+      "WebFetch(domain:www.refferally.co.il)"
+    ]
+  }
+}
